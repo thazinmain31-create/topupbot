@@ -434,12 +434,16 @@ async def deduct_balance_command(message: types.Message):
     new_ph = updated_wallet.get('ph_balance', 0.0)
     await message.reply(f"✅ **Balance Deducted Successfully!**\n\n👤 **User ID:** `{target_id}`\n💸 **Deducted:** `-{amount:,.2f} {currency}`\n\n📊 **Current Balance:**\n🇧🇷 BR: `${new_br:,.2f}`\n🇵🇭 PH: `${new_ph:,.2f}`")
 
-@dp.message(F.text.regexp(r"(?i)^\.topup\s+([a-zA-Z0-9]+)"))
+@dp.message(F.text.regexp(r"(?i)^\.topup\s+([a-zA-Z0-9]+)(?:\s+(BR|PH))?"))
 async def handle_topup(message: types.Message):
     if not await is_authorized(message.from_user.id): return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
-    match = re.search(r"(?i)^\.topup\s+([a-zA-Z0-9]+)", message.text.strip())
-    if not match: return await message.reply("Usage format - `.topup <Code>`")
+    
+    match = re.search(r"(?i)^\.topup\s+([a-zA-Z0-9]+)(?:\s+(BR|PH))?", message.text.strip())
+    if not match: return await message.reply("Usage format - `.topup <Code> [BR/PH]`")
+    
     activation_code = match.group(1).strip()
+    target_region = match.group(2).upper() if match.group(2) else None
+    
     tg_id = str(message.from_user.id)
     user_id_int = message.from_user.id 
     loading_msg = await message.reply(f"Checking Code `{activation_code}`...")
@@ -509,11 +513,18 @@ async def handle_topup(message: types.Message):
                 else: return "invalid", "Invalid Code"
             except Exception as e: return "error", str(e)
 
-        status, result = await try_redeem('BR')
-        active_region = 'BR'
-        if status in ['invalid', 'fail']: 
+        if target_region == 'BR':
+            status, result = await try_redeem('BR')
+            active_region = 'BR'
+        elif target_region == 'PH':
             status, result = await try_redeem('PH')
             active_region = 'PH'
+        else:
+            status, result = await try_redeem('BR')
+            active_region = 'BR'
+            if status in ['invalid', 'fail']: 
+                status, result = await try_redeem('PH')
+                active_region = 'PH'
 
         if status == "expired":
             await loading_msg.edit_text("⚠️ <b>Cookies Expired!</b>\n\nAuto-login စတင်နေပါသည်... ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။", parse_mode=ParseMode.HTML)
@@ -527,10 +538,12 @@ async def handle_topup(message: types.Message):
             if added_amount <= 0:
                 await loading_msg.edit_text(f"sᴍɪʟᴇ ᴏɴᴇ ʀᴇᴅᴇᴇᴍ ᴄᴏᴅᴇ sᴜᴄᴄᴇss ✅\n(Cannot retrieve exact amount due to System Delay.)")
             else:
-                if user_id_int == OWNER_ID: fee_percent = 0.0
+                if user_id_int == OWNER_ID: 
+                    fee_percent = 0.0
                 else:
                     if added_amount >= 10000: fee_percent = 0.10
                     elif added_amount >= 5000: fee_percent = 0.15
+                    elif added_amount == 1120: fee_percent = 0.2 
                     elif added_amount >= 1000: fee_percent = 0.2
                     else: fee_percent = 0.3
 
